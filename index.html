@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Momentum – Your Productivity Hub</title>
+  <meta name="description" content="A premium productivity dashboard with writing goals, daily achievements, calendar, focus tasks, and fitness tracking.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+
+  <!-- ✅ Firebase SDK (compat mode — works with your existing code style) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    /* Loading screen */
+    #app-loading {
+      position: fixed;
+      inset: 0;
+      background: #0a0a0f;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      gap: 18px;
+      transition: opacity 0.4s ease;
+    }
+    #app-loading.fade-out { opacity: 0; pointer-events: none; }
+    .loading-brand {
+      font-size: 2rem;
+      font-weight: 800;
+      color: #7c5cfc;
+      font-family: 'Inter', sans-serif;
+      letter-spacing: -1px;
+    }
+    .loading-spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid rgba(124,92,252,0.2);
+      border-top-color: #7c5cfc;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    .loading-text {
+      color: #8a8a9a;
+      font-size: 0.85rem;
+      font-family: 'Inter', sans-serif;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <!-- Loading overlay — hidden once Firebase data is loaded -->
+  <div id="app-loading">
+    <div class="loading-brand">Momentum</div>
+    <div class="loading-spinner"></div>
+    <div class="loading-text">Loading your data…</div>
+  </div>
+
+  <!-- Sidebar Navigation -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-icon">M</div>
+      <span class="brand-text">Momentum</span>
+    </div>
+    <ul class="nav-links">
+      <li>
+        <button class="nav-btn active" data-section="writing" id="nav-writing">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          <span>Writing Goals</span>
+        </button>
+      </li>
+      <li>
+        <button class="nav-btn" data-section="achievements" id="nav-achievements">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <span>Daily Goals</span>
+        </button>
+      </li>
+      <li>
+        <button class="nav-btn" data-section="calendar" id="nav-calendar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span>Calendar</span>
+        </button>
+      </li>
+      <li>
+        <button class="nav-btn" data-section="three-things" id="nav-three-things">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <span>3 Things Today</span>
+        </button>
+      </li>
+      <li>
+        <button class="nav-btn" data-section="fitness" id="nav-fitness">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+          <span>Fitness</span>
+        </button>
+      </li>
+    </ul>
+    <div class="sidebar-footer">
+      <div class="current-date" id="current-date"></div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="main-content" id="main-content">
+
+    <!-- ===== WRITING GOALS ===== -->
+    <section class="section active" id="section-writing">
+      <div class="section-header">
+        <h1>Writing Goals</h1>
+        <p class="section-subtitle">Track your writing sessions & crush your targets</p>
+      </div>
+      <div class="grid grid-2">
+        <!-- Target Card -->
+        <div class="card glass-card">
+          <div class="card-header">
+            <h2>Your Target</h2>
+            <button class="btn-icon" id="edit-writing-target" title="Edit target">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
+          </div>
+          <div id="writing-target-display">
+            <div class="big-number" id="writing-target-value">1000</div>
+            <div class="big-number-label" id="writing-target-type-label">words / day</div>
+          </div>
+          <div id="writing-target-edit" class="hidden">
+            <div class="form-group">
+              <label for="writing-target-input">Daily Target</label>
+              <input type="number" id="writing-target-input" class="input" min="1" value="1000">
+            </div>
+            <div class="form-group">
+              <label for="writing-target-type">Measure by</label>
+              <select id="writing-target-type" class="input">
+                <option value="words">Words</option>
+                <option value="minutes">Minutes</option>
+                <option value="pages">Pages</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" id="save-writing-target">Save Target</button>
+          </div>
+        </div>
+        <!-- Today's Progress -->
+        <div class="card glass-card">
+          <h2>Today's Progress</h2>
+          <div class="progress-ring-container">
+            <svg class="progress-ring" width="160" height="160" viewBox="0 0 160 160">
+              <circle class="progress-ring-bg" cx="80" cy="80" r="70" fill="none" stroke-width="10"/>
+              <circle class="progress-ring-fill" id="writing-progress-ring" cx="80" cy="80" r="70" fill="none" stroke-width="10" stroke-dasharray="439.82" stroke-dashoffset="439.82"/>
+            </svg>
+            <div class="progress-ring-text">
+              <span class="progress-ring-value" id="writing-progress-pct">0%</span>
+            </div>
+          </div>
+          <div class="progress-stats">
+            <span id="writing-today-count">0</span> / <span id="writing-today-target">1000</span> <span id="writing-unit-label">words</span>
+          </div>
+        </div>
+      </div>
+      <!-- Log Session -->
+      <div class="card glass-card mt-1">
+        <h2>Log a Session</h2>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label for="writing-session-amount">Amount</label>
+            <input type="number" id="writing-session-amount" class="input" min="1" placeholder="e.g. 500">
+          </div>
+          <div class="form-group">
+            <label>&nbsp;</label>
+            <button class="btn btn-primary" id="log-writing-session">+ Log Session</button>
+          </div>
+        </div>
+      </div>
+      <!-- Session History -->
+      <div class="card glass-card mt-1">
+        <h2>Session History</h2>
+        <div class="session-list" id="writing-session-list">
+          <p class="empty-state">No sessions logged yet. Start writing!</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== DAILY ACHIEVEMENT GOALS ===== -->
+    <section class="section" id="section-achievements">
+      <div class="section-header">
+        <h1>Daily Achievement Goals</h1>
+        <p class="section-subtitle">Define your own goals & track daily progress</p>
+      </div>
+      <div class="card glass-card">
+        <h2>Your Goals</h2>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <input type="text" id="new-goal-input" class="input" placeholder="Add a new daily goal…" maxlength="120">
+          </div>
+          <div class="form-group">
+            <button class="btn btn-primary" id="add-goal-btn">+ Add Goal</button>
+          </div>
+        </div>
+        <div class="goals-list" id="goals-list"></div>
+      </div>
+      <div class="card glass-card mt-1">
+        <h2>Today's Progress</h2>
+        <div class="achievements-progress-bar-container">
+          <div class="achievements-progress-bar" id="achievements-progress-bar" style="width:0%"></div>
+        </div>
+        <div class="achievements-progress-label" id="achievements-progress-label">0 / 0 completed</div>
+        <div class="checklist" id="daily-checklist"></div>
+      </div>
+      <div class="card glass-card mt-1">
+        <div class="streak-display">
+          <div class="streak-flame">🔥</div>
+          <div>
+            <div class="streak-number" id="achievement-streak">0</div>
+            <div class="streak-label">day streak</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== CALENDAR ===== -->
+    <section class="section" id="section-calendar">
+      <div class="section-header">
+        <h1>Calendar</h1>
+        <p class="section-subtitle">Navigate your days, see what you've accomplished</p>
+      </div>
+      <div class="card glass-card">
+        <div class="calendar-nav">
+          <button class="btn-icon" id="cal-prev">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <h2 id="cal-month-year"></h2>
+          <button class="btn-icon" id="cal-next">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+        <div class="calendar-grid" id="calendar-grid">
+          <div class="cal-day-header">Sun</div>
+          <div class="cal-day-header">Mon</div>
+          <div class="cal-day-header">Tue</div>
+          <div class="cal-day-header">Wed</div>
+          <div class="cal-day-header">Thu</div>
+          <div class="cal-day-header">Fri</div>
+          <div class="cal-day-header">Sat</div>
+        </div>
+      </div>
+      <div class="modal-overlay hidden" id="cal-modal-overlay">
+        <div class="modal glass-card" id="cal-modal">
+          <div class="modal-header">
+            <h2 id="cal-modal-date"></h2>
+            <button class="btn-icon" id="cal-modal-close">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="form-group">
+            <label for="cal-note-input">Notes for this day</label>
+            <textarea id="cal-note-input" class="input textarea" rows="4" placeholder="Write a note…"></textarea>
+          </div>
+          <button class="btn btn-primary" id="cal-save-note">Save Note</button>
+          <div id="cal-day-summary" class="mt-1"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 3 THINGS TODAY ===== -->
+    <section class="section" id="section-three-things">
+      <div class="section-header">
+        <h1>3 Things Today</h1>
+        <p class="section-subtitle">Pick your 3 most important things for today</p>
+      </div>
+      <div class="card glass-card">
+        <h2>Today's Focus</h2>
+        <div class="three-things-list" id="three-things-list"></div>
+        <div id="three-things-inputs" class="three-things-inputs">
+          <div class="form-group">
+            <label>Thing 1 <span class="badge badge-essential">Essential</span></label>
+            <input type="text" id="thing-1" class="input" placeholder="Your #1 priority…" maxlength="120">
+          </div>
+          <div class="form-group">
+            <label>Thing 2 <span class="badge badge-important">Important</span></label>
+            <input type="text" id="thing-2" class="input" placeholder="Second priority…" maxlength="120">
+          </div>
+          <div class="form-group">
+            <label>Thing 3 <span class="badge badge-important">Important</span></label>
+            <input type="text" id="thing-3" class="input" placeholder="Third priority…" maxlength="120">
+          </div>
+          <button class="btn btn-primary" id="save-three-things">Lock In My 3 Things</button>
+        </div>
+      </div>
+      <div class="card glass-card mt-1">
+        <h2>Past Days</h2>
+        <div class="archive-list" id="three-things-archive"></div>
+      </div>
+    </section>
+
+    <!-- ===== FITNESS TRACKER ===== -->
+    <section class="section" id="section-fitness">
+      <div class="section-header">
+        <h1>Fitness Tracker</h1>
+        <p class="section-subtitle">Log workouts & track your consistency</p>
+      </div>
+      <div class="grid grid-2">
+        <div class="card glass-card">
+          <h2>Log Workout</h2>
+          <div class="form-group">
+            <label for="workout-type">Exercise Type</label>
+            <select id="workout-type" class="input">
+              <option value="Running">Running</option>
+              <option value="Weight Training">Weight Training</option>
+              <option value="Cycling">Cycling</option>
+              <option value="Swimming">Swimming</option>
+              <option value="Yoga">Yoga</option>
+              <option value="HIIT">HIIT</option>
+              <option value="Walking">Walking</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div class="form-group" id="custom-exercise-group" style="display:none;">
+            <label for="custom-exercise-name">Custom Exercise</label>
+            <input type="text" id="custom-exercise-name" class="input" placeholder="Exercise name…">
+          </div>
+          <div class="form-group">
+            <label for="workout-duration">Duration (minutes)</label>
+            <input type="number" id="workout-duration" class="input" min="1" placeholder="e.g. 45">
+          </div>
+          <div class="form-group">
+            <label for="workout-notes">Notes (optional)</label>
+            <input type="text" id="workout-notes" class="input" placeholder="How did it go?">
+          </div>
+          <button class="btn btn-primary" id="log-workout-btn">+ Log Workout</button>
+        </div>
+        <div class="card glass-card">
+          <h2>Consistency</h2>
+          <div class="streak-display">
+            <div class="streak-flame">💪</div>
+            <div>
+              <div class="streak-number" id="fitness-streak">0</div>
+              <div class="streak-label">day streak</div>
+            </div>
+          </div>
+          <div class="fitness-week-total mt-1">
+            <span class="big-number" id="fitness-week-minutes">0</span>
+            <span class="big-number-label">minutes this week</span>
+          </div>
+        </div>
+      </div>
+      <div class="card glass-card mt-1">
+        <h2>This Week</h2>
+        <div class="bar-chart" id="fitness-bar-chart"></div>
+      </div>
+      <div class="card glass-card mt-1">
+        <h2>Recent Workouts</h2>
+        <div class="workout-list" id="workout-list">
+          <p class="empty-state">No workouts logged yet. Let's get moving!</p>
+        </div>
+      </div>
+      <div class="card glass-card mt-1">
+        <h2>Manage Exercise Types</h2>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <input type="text" id="new-exercise-type" class="input" placeholder="Add a custom exercise type…">
+          </div>
+          <div class="form-group">
+            <button class="btn btn-secondary" id="add-exercise-type-btn">+ Add</button>
+          </div>
+        </div>
+        <div class="tags-list" id="exercise-types-list"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- 
+    =====================================================
+    🔥 FIREBASE CONFIG — FILL THIS IN
+    =====================================================
+    1. Go to https://console.firebase.google.com
+    2. Create a project (or use an existing one)
+    3. Click "Add app" → Web → Register
+    4. Copy your firebaseConfig object and paste it below
+    5. Go to Firestore Database → Create database (start in test mode)
+    =====================================================
+  -->
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyCW_oy6Ev64qbgNiAUkwBYpzDeW2VCA6r0",
+      authDomain: "momentum-d7ed5.firebaseapp.com",
+      projectId: "momentum-d7ed5",
+      storageBucket: "momentum-d7ed5.firebasestorage.app",
+      messagingSenderId: "1030056528052",
+      appId: "1:1030056528052:web:03cd75fa0e23aaa2e56fe1"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    window.db = firebase.firestore();
+  </script>
+
+  <script src="app.js"></script>
+</body>
+</html>
